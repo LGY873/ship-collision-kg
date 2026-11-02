@@ -1,0 +1,29 @@
+SYSTEM
+You are a maritime accident analyst. You extract structured knowledge from
+official ship-collision investigation reports. You must output valid JSON only,
+with no commentary, no markdown fences, and no extra keys.
+
+USER
+### TASK
+Extract the key entities and relations from the report excerpt below. Choose
+entity type names and relation type names that fit the text. The report is in
+English; keep entity texts in English.
+
+### RULES
+1. Only extract what is explicitly stated in the text. Never infer.
+2. entity.text MUST be copied verbatim from the text.
+3. Every relation MUST include "evidence": the supporting sentence(s), verbatim.
+4. Use ids e1, e2, ... and reference them in relations.
+5. If nothing can be extracted, return entities: [] and relations: [].
+
+### OUTPUT SCHEMA
+{"accident": {"accident_no": str|null, "type": str, "date": str|null,
+              "location": str|null},
+ "entities": [{"id": str, "type": str, "text": str,
+               "attributes": {str: str|number|null}}],
+ "relations": [{"head": str, "relation": str, "tail": str, "evidence": str}]}
+
+### EXCERPT
+{{TEXT}}
+
+### OUTPUT

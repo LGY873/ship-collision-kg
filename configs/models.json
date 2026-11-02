@@ -1,0 +1,15 @@
+{
+  "models": [
+    {"id": "qwen2.5:7b-instruct", "backend": "ollama", "params_b": 7, "role": "主实验模型"},
+    {"id": "llama3.1:8b-instruct", "backend": "ollama", "params_b": 8, "role": "跨家族对照"},
+    {"id": "glm4:9b-chat", "backend": "ollama", "params_b": 9, "role": "第三款模型"},
+    {"id": "qwen2.5:14b-instruct", "backend": "ollama", "params_b": 14, "role": "同家族规模放大（上界参考）"}
+  ],
+  "generation": {
+    "temperature": 0,
+    "top_p": 1.0,
+    "max_tokens": 2048,
+    "seed": 42,
+    "num_ctx": 8192
+  }
+}

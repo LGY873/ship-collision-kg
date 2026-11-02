@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# 数据（体积大、可重新抓取，不进 git）
+data/raw/
+data/pdf/
+data/text/
+data/text_clean/
+data/corpus/*.jsonl
+data/manifest.csv
+data/runs/
+runs/
+data/kg/*.csv
+
+# 中间文件
+*.tmp
+*.log
+.dsh-office-*/
+data/logs/
+data/reports/_probe.csv
+
+# 标注
+data/gold/*.jsonl
+!data/gold/gold_template.jsonl

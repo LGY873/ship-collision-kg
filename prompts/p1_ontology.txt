@@ -1,0 +1,59 @@
+SYSTEM
+You are a maritime accident analyst. You extract structured knowledge from
+official ship-collision investigation reports. You must output valid JSON only,
+with no commentary, no markdown fences, and no extra keys.
+
+USER
+### TASK
+Extract entities and relations from the report excerpt below, following the
+ontology exactly. The report is in English; keep entity texts in English.
+
+### ONTOLOGY
+{{ENTITY_TYPES}}
+
+Relation types with allowed head -> tail:
+{{RELATIONS}}
+
+Controlled vocabularies (use these exact lowercase strings):
+{{ENUMS}}
+
+### RULES
+1. Only extract what is explicitly stated in the text. Never infer or complete
+   missing facts from general knowledge.
+2. entity.text MUST be copied verbatim from the text (same wording). Do not
+   translate, normalise, or paraphrase it.
+3. Every relation MUST include "evidence": the sentence(s) from the text that
+   support it, copied verbatim.
+4. Do not create relations whose head/tail types violate the ontology.
+5. If a value is absent, omit the attribute or set it to null. Do not guess.
+6. If nothing can be extracted, return entities: [] and relations: [].
+7. Use ids e1, e2, ... and reference them in relations.
+8. Do NOT extract the investigating authority (NTSB, MAIB, or any safety
+   investigation board) as an Organization. It investigates the accident; it is
+   not a party to it.
+9. For Environment, entity.text MUST be the specific condition copied from the
+   text (e.g. "visibility 10 miles", "current 2.7 kts"), never a category label
+   such as "Weather" or "Waterway".
+10. For the Accident entity, use the accident number (e.g. DCA15LM023) as
+    entity.text when it appears in the text.
+11. Never output two relations that express the same fact.
+12. Omit attributes that are null or unstated; keep attribute values short.
+13. Keep the output compact: at most 20 entities and 25 relations.
+14. Every relation's "head" and "tail" MUST be an id that appears in the
+    entities array. Never reference an id you did not define.
+15. Use "crewed_by" only for Ship -> Person. Use "involved_person" only for
+    Accident -> Person.
+16. Do not extract NTSB, MAIB, or any safety investigation board as an
+    Organization at all.
+
+### OUTPUT SCHEMA
+{"accident": {"accident_no": str|null, "type": str, "date": str|null,
+              "location": str|null},
+ "entities": [{"id": str, "type": str, "text": str,
+               "attributes": {str: str|number|null}}],
+ "relations": [{"head": str, "relation": str, "tail": str, "evidence": str}]}
+
+### EXCERPT
+{{TEXT}}
+
+### OUTPUT

@@ -1,0 +1,53 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ship collision extraction",
+  "type": "object",
+  "required": ["accident", "entities", "relations"],
+  "additionalProperties": false,
+  "properties": {
+    "accident": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "accident_no": {"type": ["string", "null"]},
+        "type": {"enum": ["collision", "contact", "allision", "grounding", "fire_explosion",
+                          "flooding", "capsize", "man_overboard", "injury", "other"]},
+        "date": {"type": ["string", "null"]},
+        "location": {"type": ["string", "null"]}
+      }
+    },
+    "entities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "text"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "type": {"enum": ["Accident", "Ship", "Person", "Environment",
+                            "Equipment", "Organization", "Consequence"]},
+          "text": {"type": "string", "minLength": 1},
+          "attributes": {"type": "object"}
+        }
+      }
+    },
+    "relations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["head", "relation", "tail", "evidence"],
+        "additionalProperties": false,
+        "properties": {
+          "head": {"type": "string"},
+          "relation": {"enum": ["involves_ship", "collided_with", "occurred_at",
+                                "affected_by", "caused_by_person", "caused_by_equipment",
+                                "caused_by_org", "led_to", "crewed_by", "operated_by",
+                                "equipped_with", "involved_person"]},
+          "tail": {"type": "string"},
+          "evidence": {"type": "string", "minLength": 5}
+        }
+      }
+    }
+  }
+}

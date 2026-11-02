@@ -1,0 +1,139 @@
+{
+  "version": "1.0",
+  "namespace": "http://xijing.edu.cn/maritime/collision#",
+  "note": "船舶碰撞事故本体。实体/关系/枚举/约束的唯一真源：标注规范、提示词、Neo4j schema 都从这里生成。",
+  "entities": {
+    "Accident": {
+      "label_zh": "事故",
+      "definition": "一次碰撞或触碰事件，与官方事故编号一一对应",
+      "key": ["accident_no"],
+      "attributes": {
+        "accident_no": {"type": "string", "required": true, "unique": true},
+        "type": {"type": "enum", "enum": "accident_type", "required": true},
+        "date": {"type": "date", "constraint": "1990..2026"},
+        "country": {"type": "string"},
+        "location": {"type": "string"},
+        "severity": {"type": "string"}
+      }
+    },
+    "Ship": {
+      "label_zh": "船舶",
+      "definition": "涉事的具体船舶，含被撞船、拖轮与被拖带驳船",
+      "key": ["name", "imo"],
+      "attributes": {
+        "name": {"type": "string", "required": true},
+        "imo": {"type": "string", "pattern": "^\\d{7}$"},
+        "ship_type": {"type": "string"},
+        "status": {"type": "enum", "enum": "ship_status"},
+        "flag": {"type": "string"}
+      }
+    },
+    "Person": {
+      "label_zh": "人员",
+      "definition": "与事故直接相关的自然人及其岗位角色（姓名可脱敏）",
+      "key": ["role", "name"],
+      "attributes": {
+        "role": {"type": "enum", "enum": "person_role", "required": true},
+        "name": {"type": "string"},
+        "license": {"type": "string"},
+        "experience_years": {"type": "number"}
+      }
+    },
+    "Environment": {
+      "label_zh": "环境",
+      "definition": "事故发生时的时间-空间-气象-海况-通航条件",
+      "key": ["category", "description"],
+      "attributes": {
+        "category": {"type": "enum", "enum": "env_category", "required": true},
+        "description": {"type": "string", "required": true},
+        "value": {"type": "number"},
+        "unit": {"type": "string"}
+      }
+    },
+    "Equipment": {
+      "label_zh": "设备",
+      "definition": "船舶设备、助航设备、系泊与操纵设备",
+      "key": ["name"],
+      "attributes": {
+        "name": {"type": "string", "required": true},
+        "category": {"type": "enum", "enum": "equipment_category"},
+        "failure_mode": {"type": "string"}
+      }
+    },
+    "Organization": {
+      "label_zh": "组织",
+      "definition": "对事故有管理责任或参与救助、监管的机构",
+      "key": ["name"],
+      "attributes": {
+        "name": {"type": "string", "required": true},
+        "org_type": {"type": "enum", "enum": "org_type"},
+        "role": {"type": "string"}
+      }
+    },
+    "Consequence": {
+      "label_zh": "后果",
+      "definition": "事故造成的人员、财产、环境后果",
+      "key": ["type", "description"],
+      "attributes": {
+        "type": {"type": "enum", "enum": "consequence_type", "required": true},
+        "value": {"type": "number"},
+        "unit": {"type": "string"},
+        "description": {"type": "string"}
+      }
+    }
+  },
+  "relations": {
+    "involves_ship": {"label_zh": "涉及船舶", "domain": ["Accident"], "range": ["Ship"],
+      "definition": "事故涉及的每一艘船（含被撞、被拖带）"},
+    "collided_with": {"label_zh": "发生碰撞", "domain": ["Ship"], "range": ["Ship"],
+      "definition": "两船之间的直接碰撞，双向对称"},
+    "occurred_at": {"label_zh": "发生地点", "domain": ["Accident"], "range": ["Environment"],
+      "definition": "事故发生的航道、港口、锚地（Environment.category = waterway）"},
+    "affected_by": {"label_zh": "受制于", "domain": ["Accident"], "range": ["Environment"],
+      "definition": "气象、能见度、流、潮、通航密度等外部条件"},
+    "caused_by_person": {"label_zh": "人为致因", "domain": ["Accident"], "range": ["Person"],
+      "definition": "人员的操作、判断、瞭望、疲劳等直接致因"},
+    "caused_by_equipment": {"label_zh": "设备致因", "domain": ["Accident"], "range": ["Equipment"],
+      "definition": "设备故障、维护不当、设计缺陷"},
+    "caused_by_org": {"label_zh": "管理致因", "domain": ["Accident"], "range": ["Organization"],
+      "definition": "公司管理、配员、培训、程序缺失"},
+    "led_to": {"label_zh": "导致后果", "domain": ["Accident"], "range": ["Consequence"],
+      "definition": "人员伤亡、财产损失、环境污染、船舶灭失"},
+    "crewed_by": {"label_zh": "配员", "domain": ["Ship"], "range": ["Person"],
+      "definition": "船舶在事故时的在岗人员"},
+    "operated_by": {"label_zh": "所属/经营", "domain": ["Ship"], "range": ["Organization"],
+      "definition": "船舶所有人、经营人、管理公司"},
+    "equipped_with": {"label_zh": "配备设备", "domain": ["Ship"], "range": ["Equipment"],
+      "definition": "与事故相关的船上设备"},
+    "involved_person": {"label_zh": "涉及人员", "domain": ["Accident"], "range": ["Person"],
+      "definition": "伤亡者、目击者等非致因人员"}
+  },
+  "enums": {
+    "accident_type": ["collision", "contact", "allision", "grounding", "fire_explosion",
+                      "flooding", "capsize", "man_overboard", "injury", "other"],
+    "ship_status": ["underway", "anchored", "moored", "berthed", "drifting", "unknown"],
+    "person_role": ["master", "pilot", "officer", "crew", "vts_operator", "shore_personnel"],
+    "env_category": ["weather", "visibility", "wind", "current", "tide", "waterway", "traffic", "other"],
+    "equipment_category": ["navigation", "propulsion", "steering", "mooring", "safety", "cargo", "other"],
+    "org_type": ["owner", "operator", "manager", "pilot_association", "authority", "class_society", "other"],
+    "consequence_type": ["fatality", "injury", "property_loss", "pollution", "total_loss", "detention"]
+  },
+  "factor_classes": {
+    "human": {"label_zh": "人为因素", "relations": ["caused_by_person"], "entities": ["Person"]},
+    "ship_equipment": {"label_zh": "船舶与设备", "relations": ["caused_by_equipment"], "entities": ["Equipment"]},
+    "environment": {"label_zh": "环境因素", "relations": ["affected_by"], "entities": ["Environment"]},
+    "management": {"label_zh": "管理组织", "relations": ["caused_by_org"], "entities": ["Organization"]}
+  },
+  "constraints": [
+    {"id": "C1", "rule": "relation domain/range must match entity types"},
+    {"id": "C2", "rule": "entity.text must be a substring of the source text"},
+    {"id": "C3", "rule": "enum fields must use whitelisted values"},
+    {"id": "C4", "rule": "accident_no is unique and is the primary key"},
+    {"id": "C5", "rule": "ship disambiguation: imo if available, else name+accident_no"},
+    {"id": "C6", "rule": "no self-loop relations (head != tail)"},
+    {"id": "C7", "rule": "every relation must carry an evidence sentence"},
+    {"id": "C8", "rule": "numbers must carry units; money in USD, length in m, speed in kn"},
+    {"id": "C9", "rule": "accident date must be within 1990-2026"},
+    {"id": "C10", "rule": "dedupe entities by (type, normalized text)"}
+  ]
+}

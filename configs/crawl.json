@@ -1,0 +1,18 @@
+{
+  "crawl": {
+    "user_agent": "Xijing-University-BSc-Research/1.0 (academic use; contact: student@example.edu)",
+    "min_interval_sec": 1.5,
+    "max_interval_sec": 3.0,
+    "timeout_sec": 40,
+    "retries": 3,
+    "max_concurrency": 1
+  },
+  "sources": {
+    "US": {"name": "NTSB", "entry": "https://www.ntsb.gov/investigations/Pages/{accident_no}.aspx",
+           "pdf_pattern": "MAR|MIR|report"},
+    "UK": {"name": "MAIB", "entry": "https://www.gov.uk/api/search.json?q={accident_no}",
+           "pdf_pattern": "\\.pdf"}
+  },
+  "splits": {"train": 0.6, "dev": 0.2, "test": 0.2, "seed": 42},
+  "annotation": {"n_docs": 100, "n_double": 25, "kappa_target": 0.75}
+}
