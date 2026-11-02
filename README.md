@@ -14,10 +14,14 @@
 | 种子表 | `data/seed/seed.csv` | **285 起**碰撞事故（美国 182 / 英国 103；严格 collision 129 起、触碰类 156 起） |
 | 全文语料 | `data/corpus/corpus_us_seed_split.jsonl` | 167 篇 NTSB 全文，**train 100 / dev 33 / test 34**（`splits_us.json`） |
 | 主实验 | `data/runs/p1_qwen7b_dev/` | dev 33 篇抽取 + 后处理 + 评测，**关系 F1 0.555 / 实体 F1 0.784**（严格口径，20 篇 gold） |
-| 实验报告 | [docs/实验结果.md](docs/实验结果.md) | 主结果、按类型、消融、错误分析、局限，全部带 95% CI |
-| 图谱产物 | `data/kg/nodes.csv`、`rels.csv` | 242 节点 / 254 边，属性完整度 100% |
+| 策略对比 | `data/runs/cmp_p0/`、`cmp_p2/` | 零样本 0.267/0.028、本体+少样本 0.377/0.080（实体/关系 F1），结论见报告 §4.2 |
+| 全量抽取 | `data/runs/p1_qwen7b_test/` | test 34 篇抽取 + 后处理（无 gold，只进图谱、不算指标） |
+| 实验报告 | [docs/实验结果.md](docs/实验结果.md) | 主结果、按类型、消融、阈值交叉验证、错误分析、局限，全部带 95% CI |
+| 图谱产物 | `data/kg/nodes.csv`、`rels.csv` | dev 33 篇：242 节点 / 254 边，事故属性完整度 100% |
+| 图谱（全量） | `data/kg_all/nodes.csv`、`rels.csv` | dev+test 67 篇：480 节点 / 515 边 |
 | 图表 | `docs/figures/` | 实体类型 F1、按文档对比、错误类型、图谱分布（300 dpi） |
 | 链路自测 | `tools/smoke_test.py` | 18 项断言：分节截断 → 后处理 → 评测口径 → 图谱合并，离线全过 |
+| 标注工作簿 | `data/gold/annotation_dev_test.xlsx` | 33 篇 dev 预标注（实体 307 行 / 关系 255 行），补标后 gold 可从 20 扩到 33 篇 |
 
 论文要用的表格与图都能一条命令重新生成，命令见 [docs/实验结果.md](docs/实验结果.md) 第 8 节。
 
@@ -349,6 +353,11 @@ python src/llm/runner.py --strategy p1 --model qwen2.5:7b-instruct --split dev -
 python src/llm/runner.py --strategy p2 --model qwen2.5:7b-instruct --split dev --limit 20 --run-id cmp_p2
 python src/llm/postprocess.py --run-id cmp_p1
 python src/eval/evaluate.py --run-id cmp_p1 --split dev
+
+# p0 的自由命名（vessel / crew member / was operated by…）不在本体里，后处理会全丢掉，
+# 要先映射回本体才能同口径比较；映射脚本自己也会损失一部分，这层损耗要写进论文
+python tools/normalize_p0.py --run-id cmp_p0
+python src/eval/evaluate.py --run-id cmp_p0 --split dev --out-prefix cmp_p0_mapped
 ```
 
 - **验收**：P1 的类型准确率肉眼可见高于 P0（看 `triples.jsonl` 里还有没有 `vessel`、`thing` 这种自由类型）。
