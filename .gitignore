@@ -22,6 +22,9 @@ data/kg/*.csv
 data/logs/
 data/reports/_probe.csv
 
-# 标注
+# 标注（gold.jsonl 是人工校对过的评测基准，必须入库；其余为派生/备份）
 data/gold/*.jsonl
 !data/gold/gold_template.jsonl
+!data/gold/gold.jsonl
+data/gold/gold.bak.jsonl
+data/gold/fewshot.jsonl

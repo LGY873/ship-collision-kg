@@ -112,12 +112,23 @@ class OpenAICompatClient:
         raise LLMError(f"openai-compatible failed after {self.retries} tries: {last}")
 
 
+OPENAI_MODEL_PREFIXES = ("gpt-", "o1-", "o3-", "o4-", "chatgpt-", "text-embedding-")
+
+
 def make_client(model: str, **kwargs):
-    if model.startswith("openai:") or (not model.startswith("ollama:") and OPENAI_BASE
-                                       and ":" not in model.split(":")[0]):
-        return OpenAICompatClient(model, **kwargs)
+    """选择后端。规则要可预测，不能因为设了 OPENAI_BASE 就把 ollama 模型名送去 OpenAI。
+
+    - "openai:xxx"  → OpenAI 兼容接口，模型名 xxx
+    - "ollama:xxx"  → 本地 ollama
+    - gpt-4o / o1-mini 这类 OpenAI 命名 → OpenAI 兼容接口（需配 OPENAI_BASE）
+    - 其余（qwen2.5:7b-instruct、llama3 等）→ ollama
+    """
+    if model.startswith("openai:"):
+        return OpenAICompatClient(model.split(":", 1)[1], **kwargs)
     if model.startswith("ollama:"):
-        model = model.split(":", 1)[1]
+        return OllamaClient(model.split(":", 1)[1], **kwargs)
+    if model.startswith(OPENAI_MODEL_PREFIXES):
+        return OpenAICompatClient(model, **kwargs)
     return OllamaClient(model, **kwargs)
 
 

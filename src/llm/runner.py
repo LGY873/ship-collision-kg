@@ -39,6 +39,8 @@ def main():
     ap.add_argument("--run-id", default="")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--start", type=int, default=0)
+    ap.add_argument("--doc-ids", default="", help="只跑这些 doc_id（逗号分隔），用于消融/对照")
+    ap.add_argument("--doc-ids-file", default="", help="从文件读 doc_id，一行一个或 jsonl 取 doc_id")
     ap.add_argument("--overwrite", action="store_true")
     ap.add_argument("--max-tokens", type=int, default=4096)
     args = ap.parse_args()
@@ -49,6 +51,32 @@ def main():
 
     docs = [r for r in read_jsonl(args.corpus)
             if args.split == "all" or r.get("split") == args.split]
+    wanted = None
+    if args.doc_ids or args.doc_ids_file:
+        wanted = set()
+        if args.doc_ids:
+            wanted.update(x.strip() for x in args.doc_ids.split(",") if x.strip())
+        if args.doc_ids_file:
+            p = Path(args.doc_ids_file)
+            if not p.exists():
+                logger.error("找不到 doc_id 列表 %s", p)
+                return
+            for line in p.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                if line.startswith("{"):
+                    try:
+                        line = json.loads(line).get("doc_id", "")
+                    except json.JSONDecodeError:
+                        continue
+                if line:
+                    wanted.add(line)
+        docs = [d for d in docs if d["doc_id"] in wanted]
+        missing = wanted - {d["doc_id"] for d in docs}
+        if missing:
+            logger.warning("列表里有 %d 篇不在该 split 的语料中：%s",
+                           len(missing), ", ".join(sorted(missing)[:5]))
     docs = docs[args.start:]
     if args.limit:
         docs = docs[: args.limit]

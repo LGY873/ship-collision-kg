@@ -288,13 +288,13 @@ python src/llm/runner.py --strategy p1 --model qwen2.5:7b-instruct --split dev -
 ```
 
 - **验收**：`data/runs/try_p1/raw/` 有 5 个 json，每个是完整 JSON（不是半截）。
-- 若 5 篇里 ≥2 篇 JSON 不完整：`--max-tokens 3072` 重跑，再查提示词是否太长。
+- 若 5 篇里 ≥2 篇 JSON 不完整：`--max-tokens 4096` 重跑，再查提示词是否太长。
 - 晚上：读 `docs/annotation_guide.md`，用 5 篇做试标，按规范修一遍。
 
 ### Day 11（11.01）预标注 + 修订 75 篇
 
 ```powershell
-# 01: 先让模型把 dev 全跑完（57 篇，约 10—20 分钟），作为预标注来源
+# 01: 先让模型把 dev 全跑完（33 篇，约 35 分钟），作为预标注来源
 python src/llm/runner.py --strategy p1 --model qwen2.5:7b-instruct --split dev --run-id p1_qwen7b_dev
 
 # 02: 后处理 + 转成标注模板
@@ -353,8 +353,8 @@ foreach ($m in $models) { foreach ($s in "p0","p1","p2") {
 }}
 ```
 
-- 每篇 8—15 秒，57 篇 ≈ 10—15 分钟/组，9 组约 2—3 小时；晚上挂机。
-- **验收**：`data/runs/` 下 9 个目录，每个 57 篇；中断重跑自动跳过。
+- 每篇 20—80 秒（7B 本机量化后），34 篇 ≈ 20—45 分钟/组，9 组要跑一个通宵。
+- **验收**：`data/runs/` 下 9 个目录，每个 34 篇；中断重跑自动跳过（原子写，不会留下半截 JSON）。
 - 同时（读模型输出的间隙）做 `build_nodes.py`，先用已有结果把图谱管线跑通。
 
 ### Day 16（11.06）后处理 + 评测（M3 数据部分）
@@ -457,13 +457,13 @@ python src/kg/queries.py --run q1 --limit 20
 扫描件。`parse_pdf.py` 会打 `正文过短` 警告；把这些篇目列出来，论文里说明“扫描件 X 篇未纳入”，或用 PaddleOCR 单独处理（半天工作量）。
 
 **Q3：模型输出 JSON 被截断。**
-`max_tokens` 不够：`runner.py --max-tokens 3072`。同时确认提示词没有把整篇 2 万字报告塞进去（`parse_pdf.py` 已按 Synopsis+Analysis+Conclusions 截断到 12000 字符）。
+`max_tokens` 不够：`runner.py --max-tokens 4096`（默认已是 4096）。同时确认提示词没把整篇 2 万字报告塞进去（`segment.py` 按「原因 40% > 分析 30% > 事实 30% > 结论 10%」的预算分节截断，且截断落在句末，不是简单掐头）。
 
 **Q4：`UnicodeEncodeError: 'gbk' codec ...`**
 Windows 控制台编码问题。每次新开终端先 `$env:PYTHONIOENCODING="utf-8"`；脚本内部已全部显式 `encoding="utf-8"`。
 
 **Q5：评测结果全是 0。**
-九成是 `doc_id` 对不上：gold 来自 `corpus_pdf`，预测来自 `corpus_fields`，两批 id 不同。用同一份 `*_split.jsonl` 生成标注与运行。
+九成是 `doc_id` 对不上：gold 来自 `corpus_us_seed_split.jsonl`，预测却跑了 `corpus_fields_split.jsonl`。**三份脚本的默认语料已统一为 `corpus_us_seed_split.jsonl`**；换语料时三处一起换。
 
 **Q6：`split` 字段为空导致评测 0 篇。**
 划分脚本输出的是 `corpus_*_split.jsonl`，别用回原文件。

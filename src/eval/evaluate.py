@@ -15,16 +15,20 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from common import DATA, read_jsonl, setup_logging, write_csv, write_json
-from eval.metrics import Accumulator, entity_set, prf, relation_set
+from eval.metrics import (Accumulator, bootstrap_ci, counts, entity_set,
+                          partial_counts, prf, relation_partial_sets, relation_set)
 
 RUNS = DATA / "runs"
+LEVELS = [("strict", True), ("loose", False), ("partial", None)]
 
 
 def main():
     ap = argparse.ArgumentParser(description="评测")
     ap.add_argument("--run-id", required=True)
     ap.add_argument("--gold", default=str(DATA / "gold" / "gold.jsonl"))
-    ap.add_argument("--split", default="test", choices=["dev", "test", "all"])
+    ap.add_argument("--split", default="all", choices=["dev", "test", "all"],
+                    help="按 gold 里的 split 字段筛评测文档；gold 目前全部标注在 dev，"
+                         "所以默认 all（等价于那 20 篇），test 集尚未标注")
     ap.add_argument("--out-prefix", default="")
     args = ap.parse_args()
 
@@ -57,25 +61,49 @@ def main():
         logger.error("gold 里没有 split=%s 的文档", args.split)
         return
 
-    acc = {("entity", "strict"): Accumulator(), ("entity", "loose"): Accumulator(),
-           ("relation", "strict"): Accumulator(), ("relation", "loose"): Accumulator()}
+    acc = {(lv, "entity"): Accumulator() for lv, _ in LEVELS}
+    acc.update({(lv, "relation"): Accumulator() for lv, _ in LEVELS})
 
     detail = []
+    per_doc = {k: [] for k in acc}
     for d in doc_ids:
         g, p = gold[d], pred.get(d, {})
-        for strict, tag in ((True, "strict"), (False, "loose")):
-            gs = entity_set(g.get("entities", []), strict)
-            ps = entity_set(p.get("entities", []), strict)
-            acc[("entity", tag)].add(gs, ps)
-            for typ in {t for t, _ in gs} | {t for t, _ in ps}:
-                acc[("entity", tag)].add({x for x in gs if x[0] == typ},
-                                         {x for x in ps if x[0] == typ}, by=typ)
-            gr = relation_set(g, strict)
-            pr = relation_set(p, strict)
-            acc[("relation", tag)].add(gr, pr)
-            for rel_type in {x[1] for x in gr} | {x[1] for x in pr}:
-                acc[("relation", tag)].add({x for x in gr if x[1] == rel_type},
-                                           {x for x in pr if x[1] == rel_type}, by=rel_type)
+        for tag, strict in LEVELS:
+            if strict is None:
+                ec = partial_counts(g.get("entities", []), p.get("entities", []))
+                gr, pr = relation_partial_sets(g, p)
+                rc = counts(gr, pr)
+            else:
+                gs = entity_set(g.get("entities", []), strict)
+                ps = entity_set(p.get("entities", []), strict)
+                ec = counts(gs, ps)
+                gr = relation_set(g, strict)
+                pr = relation_set(p, strict)
+                rc = counts(gr, pr)
+            per_doc[(tag, "entity")].append(ec)
+            acc[(tag, "entity")].add_counts(*ec)
+            per_doc[(tag, "relation")].append(rc)
+            acc[(tag, "relation")].add_counts(*rc)
+            if strict is not None:
+                gs = entity_set(g.get("entities", []), strict)
+                ps = entity_set(p.get("entities", []), strict)
+                for typ in {t for t, _ in gs} | {t for t, _ in ps}:
+                    acc[(tag, "entity")].add({x for x in gs if x[0] == typ},
+                                             {x for x in ps if x[0] == typ}, by=typ)
+                for rel_type in {x[1] for x in gr} | {x[1] for x in pr}:
+                    acc[(tag, "relation")].add({x for x in gr if x[1] == rel_type},
+                                               {x for x in pr if x[1] == rel_type}, by=rel_type)
+            else:
+                # 部分重叠口径：同一类型内部单独配对，才能给出按类型的 P/R/F1
+                types = {e.get("type") for e in g.get("entities", [])} | \
+                        {e.get("type") for e in p.get("entities", [])}
+                for typ in types:
+                    gc = [e for e in g.get("entities", []) if e.get("type") == typ]
+                    pc = [e for e in p.get("entities", []) if e.get("type") == typ]
+                    acc[(tag, "entity")].add_counts(*partial_counts(gc, pc), by=typ)
+                for rel_type in {x[1] for x in gr} | {x[1] for x in pr}:
+                    acc[(tag, "relation")].add({x for x in gr if x[1] == rel_type},
+                                               {x for x in pr if x[1] == rel_type}, by=rel_type)
         detail.append({
             "doc_id": d,
             "country": g.get("country", ""),
@@ -87,19 +115,31 @@ def main():
         })
 
     rows = []
-    for (level, tag), a in acc.items():
-        r = a.result()
-        rows.append({"level": level, "match": tag, **r, "macro_f1": a.macro()})
-        logger.info("%-8s %-6s  P=%.3f  R=%.3f  F1=%.3f  (macro F1=%.3f)  tp=%d fp=%d fn=%d",
-                    level, tag, r["p"], r["r"], r["f1"], a.macro(), r["tp"], r["fp"], r["fn"])
+    ci_rows = {}
+    # 先出实体级再出关系级，与报告表顺序一致
+    for level in ("entity", "relation"):
+        for tag, _ in LEVELS:
+            a = acc[(tag, level)]
+            r = a.result()
+            ci = bootstrap_ci(per_doc[(tag, level)])
+            ci_rows[f"{level}_{tag}"] = ci
+            rows.append({"level": level, "match": tag, **r, "macro_f1": a.macro(),
+                         "f1_lo": ci.get("f1", (0, 0))[0], "f1_hi": ci.get("f1", (0, 0))[1]})
+            logger.info("%-8s %-7s  P=%.3f  R=%.3f  F1=%.3f [95%% CI %.3f–%.3f]  (macro F1=%.3f)  tp=%d fp=%d fn=%d",
+                        level, tag, r["p"], r["r"], r["f1"],
+                        ci.get("f1", (0, 0))[0], ci.get("f1", (0, 0))[1],
+                        a.macro(), r["tp"], r["fp"], r["fn"])
 
     prefix = args.out_prefix or args.run_id
     write_csv(run_dir / f"{prefix}_eval.csv", rows,
-              ["level", "match", "tp", "fp", "fn", "p", "r", "f1", "macro_f1"])
+              ["level", "match", "tp", "fp", "fn", "p", "r", "f1", "f1_lo", "f1_hi", "macro_f1"])
+    write_csv(run_dir / f"{prefix}_by_doc.csv", detail,
+              ["doc_id", "country", "tier", "n_gold_ent", "n_pred_ent",
+               "n_gold_rel", "n_pred_rel"])
 
-    # 按实体类型看长尾
+    # 按实体类型看长尾（用宽松口径，部分重叠口径不支持按类型累计）
     type_rows = []
-    a = acc[("entity", "loose")]
+    a = acc[("loose", "entity")]
     for typ, (tp, fp, fn) in sorted(a.by_type.items()):
         if typ == "*":
             continue
@@ -113,7 +153,8 @@ def main():
 
     write_json(run_dir / f"{prefix}_eval.json", {
         "run_id": args.run_id, "n_docs": len(doc_ids), "split": args.split,
-        "metrics": rows, "by_type": type_rows,
+        "metrics": rows, "by_type": type_rows, "bootstrap_ci": ci_rows,
+        "bootstrap": {"n_boot": 2000, "alpha": 0.05, "seed": 42},
     })
     logger.info("结果写入 %s", run_dir)
 

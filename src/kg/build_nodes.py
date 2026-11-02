@@ -21,6 +21,30 @@ from common import DATA, read_jsonl, setup_logging, write_csv
 RUNS = DATA / "runs"
 KG = DATA / "kg"
 
+# 事故属性可以从语料元数据补齐：NTSB 报告头本来就写着事故号/日期/地点，
+# 但模型抽 Accident 时经常只写 text、不写 attributes，导致图里查不到国别/年份。
+META_FIELDS = {
+    "accident_no": "accident_no",
+    "type": "accident_type",
+    "date": "date",
+    "country": "country",
+    "location": "location",
+    "severity": "collision_tier",
+}
+
+
+def load_meta(corpus: Path) -> dict:
+    """doc_id / accident_no -> 语料元数据（只取图上要用的几列）。"""
+    out = {}
+    if not corpus.exists():
+        return out
+    for d in read_jsonl(corpus):
+        meta = {k: d.get(v) for k, v in META_FIELDS.items() if d.get(v)}
+        for key in (d.get("doc_id"), d.get("accident_no")):
+            if key:
+                out[str(key).lower()] = meta
+    return out
+
 
 def norm(s: str) -> str:
     s = (s or "").lower().strip()
@@ -60,9 +84,15 @@ def main():
     ap.add_argument("--out-dir", default=str(KG))
     ap.add_argument("--min-evidence", action="store_true",
                     help="只用 evidence 能在原文找到的关系")
+    ap.add_argument("--corpus", default=str(DATA / "corpus" / "corpus_us_seed_split.jsonl"),
+                    help="语料元数据来源，用于补齐 Accident 的国别/日期/类型")
+    ap.add_argument("--no-meta", action="store_true", help="不从语料补事故属性")
     args = ap.parse_args()
 
     logger = setup_logging("build_nodes", DATA / "logs" / "build_nodes.log")
+    meta = {} if args.no_meta else load_meta(Path(args.corpus))
+    if meta:
+        logger.info("语料元数据 %d 条（用于补 Accident 属性）", len(meta))
     nodes, rels = {}, []
     rel_counter = Counter()
 
@@ -76,16 +106,23 @@ def main():
             n_doc += 1
             id2gid = {}
             acc_no = doc.get("accident_no") or ""
+            doc_meta = meta.get(str(doc.get("doc_id", "")).lower()) or {}
             for ent in doc.get("entities", []):
                 label, gid = node_key(ent)
                 id2gid[ent["id"]] = gid
+                props = dict(ent.get("attributes") or {})
+                if label == "Accident":
+                    # 模型常漏写事故属性；缺什么用报告头元数据补什么，已有值不覆盖
+                    for k, v in doc_meta.items():
+                        if v and not props.get(k):
+                            props[k] = v
                 if gid not in nodes:
                     nodes[gid] = {"gid": gid, "label": label, "name": ent.get("text", ""),
-                                  "props": dict(ent.get("attributes") or {}),
+                                  "props": props,
                                   "source_docs": set()}
                 else:
                     # 同一实体在多篇里出现：属性取并集，不覆盖已有取值
-                    for k, v in (ent.get("attributes") or {}).items():
+                    for k, v in props.items():
                         if v and not nodes[gid]["props"].get(k):
                             nodes[gid]["props"][k] = v
                 nodes[gid]["source_docs"].add(doc["doc_id"])

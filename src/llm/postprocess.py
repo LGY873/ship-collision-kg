@@ -22,6 +22,13 @@ from llm.validate import load_schema, validate
 RUNS = DATA / "runs"
 FENCE = re.compile(r"^\s*```(?:json)?|```\s*$", re.I)
 
+# 模型偶尔写出本体的近义关系名，直接映射回本体
+REL_ALIAS = {
+    "involved_ship": "involves_ship",
+    "ship_involved": "involves_ship",
+    "caused_by_ship": "caused_by_equipment",
+}
+
 
 def _close_brackets(s: str) -> str:
     """把被截断的 JSON 补齐括号：扫描到哪算哪，按栈补 ] 和 }。"""
@@ -252,7 +259,7 @@ def main():
         relations, rel_seen = [], set()
         for r in obj.get("relations", []):
             hid, tid = id_map.get(r.get("head")), id_map.get(r.get("tail"))
-            rel = r.get("relation")
+            rel = REL_ALIAS.get((r.get("relation") or "").strip(), (r.get("relation") or "").strip())
             ev = (r.get("evidence") or "").strip()
             stats["rel_total"] += 1
             if not hid or not tid or rel not in onto["relations"] or hid == tid:

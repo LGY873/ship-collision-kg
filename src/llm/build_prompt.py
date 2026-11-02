@@ -81,7 +81,7 @@ def build(strategy: str, text: str, onto: dict | None = None,
 def main():
     ap = argparse.ArgumentParser(description="生成提示词")
     ap.add_argument("--strategy", choices=list(TEMPLATES), default="p1")
-    ap.add_argument("--corpus", default=str(DATA / "corpus" / "corpus_fields_split.jsonl"))
+    ap.add_argument("--corpus", default=str(DATA / "corpus" / "corpus_us_seed_split.jsonl"))
     ap.add_argument("--doc-id", default="")
     ap.add_argument("--show", action="store_true")
     ap.add_argument("--dump")
