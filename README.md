@@ -7,16 +7,19 @@
 
 ## 0. 现在就已经跑通的部分
 
-这套代码不是空壳，下面这些结果是在你现有三份 Excel 上真实跑出来的：
+这套代码不是空壳，下面这些结果是在本地真实跑出来的（2026-11-02 全量重跑）：
 
 | 产物 | 路径 | 内容 |
 |---|---|---|
 | 种子表 | `data/seed/seed.csv` | **285 起**碰撞事故（美国 182 / 英国 103；严格 collision 129 起、触碰类 156 起） |
-| 兜底语料 | `data/corpus/corpus_fields.jsonl` | 285 篇事故短文（字段拼接，路径 B） |
-| 数据划分 | `data/corpus/splits.json` | 事故级 6:2:2 = **171 / 57 / 57** |
-| 链路自测 | `tools/smoke_test.py` | 伪造模型输出 → 后处理 → 评测 → 图谱 CSV，全链路通过 |
+| 全文语料 | `data/corpus/corpus_us_seed_split.jsonl` | 167 篇 NTSB 全文，**train 100 / dev 33 / test 34**（`splits_us.json`） |
+| 主实验 | `data/runs/p1_qwen7b_dev/` | dev 33 篇抽取 + 后处理 + 评测，**关系 F1 0.555 / 实体 F1 0.784**（严格口径，20 篇 gold） |
+| 实验报告 | [docs/实验结果.md](docs/实验结果.md) | 主结果、按类型、消融、错误分析、局限，全部带 95% CI |
+| 图谱产物 | `data/kg/nodes.csv`、`rels.csv` | 242 节点 / 254 边，属性完整度 100% |
+| 图表 | `docs/figures/` | 实体类型 F1、按文档对比、错误类型、图谱分布（300 dpi） |
+| 链路自测 | `tools/smoke_test.py` | 18 项断言：分节截断 → 后处理 → 评测口径 → 图谱合并，离线全过 |
 
-也就是说：**标注、实验、图谱三段，今天就可以开始；只有 PDF 抓取需要联网。**
+论文要用的表格与图都能一条命令重新生成，命令见 [docs/实验结果.md](docs/实验结果.md) 第 8 节。
 
 ---
 
@@ -80,16 +83,23 @@ ship-collision-kg/
 │  ├─ llm/runner.py              批量抽取（断点续跑）
 │  ├─ llm/validate.py            轻量 JSON Schema 校验
 │  ├─ llm/postprocess.py         修复→校验→对齐→归一→约束→去重  ✅ 已验证
-│  ├─ eval/metrics.py            P/R/F1（严格 + 宽松）
+│  ├─ eval/metrics.py            P/R/F1（严格 / 宽松 / 部分重叠 三档 + bootstrap CI）
 │  ├─ eval/evaluate.py           评测主脚本                    ✅ 已验证
 │  ├─ kg/build_nodes.py          三元组 → nodes.csv/rels.csv    ✅ 已验证
-│  ├─ kg/load_neo4j.py           导入 Neo4j 5.x
-│  └─ kg/queries.py              8 条分析查询
+│  ├─ kg/load_neo4j.py           导入 Neo4j 5.x（属性摊平写入）
+│  └─ kg/queries.py              8 条分析查询（Neo4j 版）
 ├─ tools/
 │  ├─ check_env.py               环境自检                      ✅
-│  ├─ smoke_test.py              离线全链路自测                ✅
+│  ├─ smoke_test.py              离线全链路自测（18 项断言）    ✅
 │  ├─ make_fake_report.py        造一份假报告测解析            ✅
 │  ├─ make_gold_template.py      生成标注模板（可预标注）       ✅
+│  ├─ make_annotation_workbook.py 标注 Excel（说明/文档/实体/关系）
+│  ├─ make_fewshot.py            p2 用的少样本示例（含泄漏检查） ✅
+│  ├─ fix_gold_spans.py          校对 gold 的 span 原文一致性   ✅
+│  ├─ kg_stats.py                图谱规模/度分布/属性完整度     ✅
+│  ├─ kg_queries_local.py        8 条查询的不依赖 Neo4j 实现    ✅
+│  ├─ report_results.py          评测结果 → Markdown 表格      ✅
+│  ├─ make_figures.py            论文插图（300 dpi，中文字体）  ✅
 │  └─ kappa.py                   双标一致性 Cohen's κ          ✅
 └─ data/                         所有数据产物（不进 git）
 ```
