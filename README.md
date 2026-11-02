@@ -14,7 +14,7 @@
 | 种子表 | `data/seed/seed.csv` | **285 起**碰撞事故（美国 182 / 英国 103；严格 collision 129 起、触碰类 156 起） |
 | 全文语料 | `data/corpus/corpus_us_seed_split.jsonl` | 167 篇 NTSB 全文，**train 100 / dev 33 / test 34**（`splits_us.json`） |
 | 主实验 | `data/runs/p1_qwen7b_dev/` | dev 33 篇抽取 + 后处理 + 评测，**关系 F1 0.555 / 实体 F1 0.784**（严格口径，20 篇 gold） |
-| 策略对比 | `data/runs/cmp_p0/`、`cmp_p2/` | 零样本 0.267/0.028、本体+少样本 0.377/0.080（实体/关系 F1），结论见报告 §4.2 |
+| 策略对比 | `data/runs/cmp_p0/`、`cmp_p2/`、`cmp_p2b/` | 零样本 0.267/0.028、少样本 2 例 0.377/0.080、补设备类示例 3 例 0.489/0.181（实体/关系 F1），结论见报告 §4.2 |
 | 全量抽取 | `data/runs/p1_qwen7b_test/` | test 34 篇抽取 + 后处理（无 gold，只进图谱、不算指标） |
 | 实验报告 | [docs/实验结果.md](docs/实验结果.md) | 主结果、按类型、消融、阈值交叉验证、错误分析、局限，全部带 95% CI |
 | 图谱产物 | `data/kg/nodes.csv`、`rels.csv` | dev 33 篇：242 节点 / 254 边，事故属性完整度 100% |

@@ -143,6 +143,63 @@ EXAMPLES = [
             ],
         },
     },
+    # 第三条示例专门补 Equipment：前两条示例里一个设备都没有，
+    # 模型于是把「设备」这一类整体漏掉（实测 p2 的 Equipment F1 = 0）。
+    # 取材 us_DCA15LM030（训练集，撞码头 allision，原因是操舵/机控故障）。
+    {
+        "doc_id": "us_DCA15LM030",
+        "output": {
+            "accident": {
+                "accident_no": "DCA15LM030",
+                "type": "allision",
+                "date": None,
+                "location": "IMTT Bayonne Pier A",
+            },
+            "entities": [
+                {"id": "e1", "type": "Accident", "text": "DCA15LM030",
+                 "attributes": {"accident_no": "DCA15LM030", "type": "allision",
+                                "location": "IMTT Bayonne Pier A"}},
+                {"id": "e2", "type": "Ship", "text": "Peter F Gellatly",
+                 "attributes": {"name": "Peter F Gellatly", "ship_type": "towing vessel",
+                                "status": "underway", "flag": "United States"}},
+                {"id": "e3", "type": "Ship", "text": "Double Skin 501",
+                 "attributes": {"name": "Double Skin 501", "ship_type": "tank barge",
+                                "status": "towed", "flag": "United States"}},
+                {"id": "e4", "type": "Person", "text": "captain",
+                 "attributes": {"role": "master"}},
+                {"id": "e5", "type": "Person", "text": "engineer",
+                 "attributes": {"role": "engineer"}},
+                {"id": "e6", "type": "Organization", "text": "Vane Line Bunkering Inc",
+                 "attributes": {"name": "Vane Line Bunkering Inc", "org_type": "owner"}},
+                {"id": "e7", "type": "Equipment", "text": "starboard engine control system",
+                 "attributes": {"equipment_type": "engine control system",
+                                "status": "malfunction"}},
+                {"id": "e8", "type": "Equipment",
+                 "text": "astern wiring harness on the electronic selector valve solenoid",
+                 "attributes": {"equipment_type": "wiring harness", "status": "loose wires"}},
+            ],
+            "relations": [
+                {"head": "e1", "relation": "involves_ship", "tail": "e2",
+                 "evidence": "the allision of the Peter F Gellatly tow with IMTT Bayonne Pier A"},
+                {"head": "e1", "relation": "involves_ship", "tail": "e3",
+                 "evidence": "the allision of the Peter F Gellatly tow with IMTT Bayonne Pier A"},
+                {"head": "e1", "relation": "caused_by_equipment", "tail": "e7",
+                 "evidence": "the starboard engine control system was not operating as designed"},
+                {"head": "e1", "relation": "caused_by_person", "tail": "e4",
+                 "evidence": "The captain told investigators that he did not always notify the dispatcher of mechanical issues"},
+                {"head": "e2", "relation": "crewed_by", "tail": "e4",
+                 "evidence": "The captain and the engineer told investigators that they were required to and did read the SMS manual"},
+                {"head": "e2", "relation": "crewed_by", "tail": "e5",
+                 "evidence": "The engineer did not communicate his findings once he left the engine room"},
+                {"head": "e2", "relation": "operated_by", "tail": "e6",
+                 "evidence": "Vane Line Bunkering Inc"},
+                {"head": "e2", "relation": "equipped_with", "tail": "e7",
+                 "evidence": "the starboard engine control system was not operating as designed"},
+                {"head": "e2", "relation": "equipped_with", "tail": "e8",
+                 "evidence": "astern wiring harness on the electronic selector valve solenoid had loose 12-volt wires"},
+            ],
+        },
+    },
 ]
 
 

@@ -44,7 +44,9 @@ def ontology_blocks(onto: dict):
     return entity_block, rel_block, enum_block
 
 
-def load_examples(path=None, max_n: int = 2) -> str:
+def load_examples(path=None, max_n: int = 3) -> str:
+    """拼接少样本示例。max_n 默认 3：示例集里第三条专门覆盖 Equipment/Consequence，
+    只取前两条会让模型把这两类整体漏掉（见论文 6.6 节）。"""
     p = Path(path or DATA / "gold" / "fewshot.jsonl")
     if not p.exists():
         return ""
