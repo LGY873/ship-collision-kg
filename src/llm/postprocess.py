@@ -122,6 +122,31 @@ AUTHORITY_WORDS = ("national transportation safety board", "ntsb", "maib",
                    "marine accident investigation")
 
 
+def synth_accident(doc: dict, text_norm: str) -> dict:
+    """从文档元数据合成 Accident 节点。
+
+    为什么需要：模型经常把第一艘船当作句子的主语，于是所有事故级关系都被挂到
+    Ship 上、撞 domain/range 检查全部丢弃（实测 21 条关系只留下 1 条）。事故号、
+    日期、地点这些其实在语料元数据里就有，直接补一个 Accident 节点比丢掉关系划算。
+    节点带 synthesized=True，评测时可按需要排除。
+    """
+    no = (doc.get("accident_no") or "").strip()
+    text = no or (doc.get("accident_key") or "accident")
+    attrs = {
+        "accident_no": no,
+        "type": doc.get("accident_type") or "",
+        "date": doc.get("date") or "",
+        "country": doc.get("country") or "",
+        "location": doc.get("location") or "",
+        "severity": doc.get("collision_tier") or "",
+    }
+    aligned = bool(no) and norm_text(no) in text_norm
+    return {"id": "", "type": "Accident", "text": text, "text_norm": norm_text(text),
+            "attributes": {k: v for k, v in attrs.items() if v},
+            "aligned": aligned, "align_ratio": 1.0 if aligned else 0.0,
+            "synthesized": True}
+
+
 def is_authority(ent: dict) -> bool:
     """调查机构不是事故参与方，即使模型抽出来也要丢掉。"""
     if ent.get("type") != "Organization":
@@ -133,9 +158,13 @@ def is_authority(ent: dict) -> bool:
 def main():
     ap = argparse.ArgumentParser(description="后处理")
     ap.add_argument("--run-id", required=True)
-    ap.add_argument("--corpus", default=str(DATA / "corpus" / "corpus_fields_split.jsonl"))
+    ap.add_argument("--corpus", default=str(DATA / "corpus" / "corpus_us_seed_split.jsonl"))
     ap.add_argument("--out", default="")
     ap.add_argument("--min-evidence-ratio", type=float, default=0.85)
+    ap.add_argument("--drop-low-evidence", action="store_true",
+                    help="证据命中率低于阈值的关系直接丢弃（默认只打标记，便于论文对比）")
+    ap.add_argument("--no-synth-accident", action="store_true",
+                    help="不从文档元数据补 Accident 节点（用于消融对比）")
     args = ap.parse_args()
 
     run_dir = RUNS / args.run_id
@@ -149,7 +178,8 @@ def main():
 
     out_rows, error_rows = [], []
     stats = {"json_ok": 0, "schema_ok": 0, "ent_total": 0, "ent_aligned": 0,
-             "rel_total": 0, "rel_kept": 0, "rel_evidence_ok": 0}
+             "rel_total": 0, "rel_kept": 0, "rel_evidence_ok": 0,
+             "rel_repaired": 0, "acc_synth": 0}
 
     for f in files:
         rec = read_json(f)
@@ -206,8 +236,19 @@ def main():
             id_map = {k: v for k, v in id_map.items() if v not in authority_ids}
             entities = [e for e in entities if e["id"] not in authority_ids]
 
+        # ---- 事故节点：模型没给就从元数据补 ----
+        acc = next((e for e in entities if e["type"] == "Accident"), None)
+        acc_synth = False
+        if acc is None and not args.no_synth_accident:
+            acc = synth_accident(doc, text_norm)
+            acc["id"] = f"e{len(entities) + 1}"
+            entities.append(acc)
+            acc_synth = True
+            stats["acc_synth"] += 1
+
         # ---- 关系 ----
         by_id = {e["id"]: e for e in entities}
+        acc_id = acc["id"] if acc else None
         relations, rel_seen = [], set()
         for r in obj.get("relations", []):
             hid, tid = id_map.get(r.get("head")), id_map.get(r.get("tail"))
@@ -219,13 +260,28 @@ def main():
                                    "detail": f"{r.get('head')}-{rel}->{r.get('tail')}"})
                 continue
             spec = onto["relations"][rel]
+            repaired = False
             if by_id[hid]["type"] not in spec["domain"] or by_id[tid]["type"] not in spec["range"]:
-                error_rows.append({"doc_id": rec["doc_id"], "stage": "domain_range",
-                                   "detail": f"{by_id[hid]['type']}-{rel}->{by_id[tid]['type']}"})
-                continue
+                # 修复规则：事故级关系被模型挂到了参与方（Ship/Person…）身上，
+                # 但尾实体类型合法 → 把 head 换成事故节点，而不是整条丢掉。
+                if (acc_id and hid != acc_id and tid != acc_id
+                        and spec["domain"] == ["Accident"]
+                        and by_id[tid]["type"] in spec["range"]
+                        and by_id[hid]["type"] in ("Ship", "Person", "Organization", "Environment")):
+                    hid = acc_id
+                    repaired = True
+                    stats["rel_repaired"] += 1
+                else:
+                    error_rows.append({"doc_id": rec["doc_id"], "stage": "domain_range",
+                                       "detail": f"{by_id[hid]['type']}-{rel}->{by_id[tid]['type']}"})
+                    continue
             ev_ok, ev_ratio = find_in_text(ev, text_norm, sentences)
             if ev_ratio >= args.min_evidence_ratio:
                 stats["rel_evidence_ok"] += 1
+            elif args.drop_low_evidence:
+                error_rows.append({"doc_id": rec["doc_id"], "stage": "evidence",
+                                   "detail": f"{rel} ratio={ev_ratio:.2f}"})
+                continue
             key = (hid, rel, tid)
             if key in rel_seen:
                 continue
@@ -239,6 +295,7 @@ def main():
                               "tail": tid, "tail_text": by_id[tid]["text"],
                               "evidence": ev, "evidence_ok": ev_ok,
                               "evidence_ratio": round(ev_ratio, 3),
+                              "repaired": repaired,
                               "factor_class": factor})
             stats["rel_kept"] += 1
 
@@ -252,6 +309,7 @@ def main():
             "model": rec.get("model"),
             "strategy": rec.get("strategy"),
             "accident": obj.get("accident", {}),
+            "accident_synth": acc_synth,
             "entities": entities,
             "relations": relations,
             "n_entities": len(entities),
@@ -268,11 +326,12 @@ def main():
     n = max(1, len(files))
     logger.info("完成 %d 篇：JSON 合法 %.1f%%  通过 schema %.1f%%",
                 len(out_rows), 100.0 * stats["json_ok"] / n, 100.0 * stats["schema_ok"] / n)
-    logger.info("实体 %d 个，原文对齐 %.1f%%；关系保留 %d/%d，证据命中 %.1f%%",
+    logger.info("实体 %d 个，原文对齐 %.1f%%；关系保留 %d/%d（其中事故 head 修复 %d 条），证据命中 %.1f%%",
                 stats["ent_total"],
                 100.0 * stats["ent_aligned"] / max(1, stats["ent_total"]),
-                stats["rel_kept"], stats["rel_total"],
+                stats["rel_kept"], stats["rel_total"], stats["rel_repaired"],
                 100.0 * stats["rel_evidence_ok"] / max(1, stats["rel_total"]))
+    logger.info("补充 Accident 节点的文档 %d 篇", stats["acc_synth"])
     logger.info("结果：%s；错误记录：%s", out_path, run_dir / "errors.jsonl")
 
 

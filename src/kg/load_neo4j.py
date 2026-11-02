@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import os
 import sys
 from pathlib import Path
@@ -62,21 +63,40 @@ def main():
         s.run("CREATE INDEX acc_no IF NOT EXISTS FOR (a:Accident) ON (a.accident_no)")
         logger.info("约束与索引就绪")
 
-        # 节点：按 label 分批 MERGE
+        # 节点：按 label 分批 MERGE。
+        # 本体里定义的 7 类属性存在 nodes.csv 的 props 列（JSON），必须一并导入，
+        # 否则 Accident 的日期/严重度、Ship 的 IMO/船旗在图上全丢，q3/q5 这类查询直接查空。
         rows = list(read_csv(args.nodes))
+
+        def _flat(props_json: str) -> dict:
+            """Neo4j 节点属性只能是标量，dict/list 一律转成 JSON 字符串。"""
+            try:
+                d = json.loads(props_json or "{}")
+            except Exception:  # noqa: BLE001
+                return {}
+            out = {}
+            for k, v in (d or {}).items():
+                if v in (None, "", [], {}):
+                    continue
+                out[k] = v if isinstance(v, (str, int, float, bool)) else json.dumps(v, ensure_ascii=False)
+            return out
+
         for label in LABELS:
             batch = [r for r in rows if r["label"] == label]
+            keys = sorted({k for r in batch for k in _flat(r.get("props", ""))})
+            extra = "".join(f", n.`{k}` = row.`{k}`" for k in keys)
             for i in range(0, len(batch), BATCH):
                 chunk = batch[i:i + BATCH]
                 s.run(
                     f"UNWIND $rows AS row "
                     f"MERGE (n:{label} {{gid: row.gid}}) "
                     f"SET n.name = row.name, n.n_docs = toInteger(row.n_docs), "
-                    f"    n.source_docs = row.source_docs",
+                    f"    n.source_docs = row.source_docs" + extra,
                     rows=[{"gid": r["gid"], "name": r["name"], "n_docs": r["n_docs"],
-                           "source_docs": r["source_docs"]} for r in chunk],
+                           "source_docs": r["source_docs"], **_flat(r.get("props", ""))}
+                          for r in chunk],
                 )
-            logger.info("节点 %-12s %d", label, len(batch))
+            logger.info("节点 %-12s %d（属性字段 %d 个）", label, len(batch), len(keys))
 
         # 关系：按类型分批
         rels = list(read_csv(args.rels))

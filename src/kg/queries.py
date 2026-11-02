@@ -38,30 +38,36 @@ ORDER BY co_occur DESC LIMIT $limit
         "title": "国别差异：事故数与因素类型分布",
         "cypher": """
 MATCH (a:Accident)-[r]->(f)
-RETURN a.name AS accident, a.source AS country, type(r) AS relation, count(DISTINCT a) AS n
-ORDER BY country, n DESC LIMIT $limit
+WHERE a.country IS NOT NULL AND a.country <> ''
+RETURN a.country AS country, type(r) AS relation,
+       count(DISTINCT a) AS accidents, count(*) AS edges
+ORDER BY country, edges DESC LIMIT $limit
 """,
-        "note": "英国报告多 contributing factors，美国多 probable cause",
+        "note": "a.country 来自 nodes.csv 的 props，只在 load_neo4j 导入属性后才有值",
     },
     "q4": {
         "title": "船型—事故类型关联",
         "cypher": """
 MATCH (a:Accident)-[:involves_ship]->(s:Ship)
-RETURN s.name AS ship, a.name AS accident, a.source AS source, count(*) AS n
+RETURN coalesce(s.ship_type, 'unknown') AS ship_type,
+       coalesce(a.type, 'unknown') AS accident_type,
+       count(DISTINCT a) AS accidents, count(*) AS n
 ORDER BY n DESC LIMIT $limit
 """,
-        "note": "ship_type 属性补齐后可换成按类型统计",
+        "note": "ship_type / a.type 都来自 props 属性，需要属性导入生效",
     },
     "q5": {
         "title": "时间趋势",
         "cypher": """
 MATCH (a:Accident)
+WHERE a.date IS NOT NULL AND a.date <> ''
+WITH a, substring(a.date, 0, 4) AS year
+WHERE year =~ '[0-9][0-9][0-9][0-9]'
 OPTIONAL MATCH (a)-[:led_to]->(c:Consequence)
-RETURN substring(a.name, 0, 4) AS year, count(DISTINCT a) AS accidents,
-       count(c) AS consequences
+RETURN year, count(DISTINCT a) AS accidents, count(c) AS consequences
 ORDER BY year LIMIT $limit
 """,
-        "note": "需先把事故年份写进 name 或补 date 属性",
+        "note": "按 Accident.date 取年份，不再从 name 前 4 位猜",
     },
     "q6": {
         "title": "节点中心性（度）",
@@ -98,7 +104,8 @@ def main():
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--run", choices=list(QUERIES))
     ap.add_argument("--limit", type=int, default=20)
-    ap.add_argument("--param", default="Accident:DCA15LM023")
+    ap.add_argument("--param", default="",
+                    help="q8 用的事故 gid；留空则自动挑第一个 Accident")
     args = ap.parse_args()
 
     if args.list or not args.run:
@@ -119,7 +126,14 @@ def main():
     pwd = os.environ.get("NEO4J_PASSWORD", "neo4j12345")
     driver = GraphDatabase.driver(uri, auth=(user, pwd))
     with driver.session() as s:
-        rows = list(s.run(q["cypher"], limit=args.limit, param=args.param))
+        param = args.param
+        if not param:
+            # 默认参数写死一个不存在的事故号是旧 bug；改成从库里取
+            rec = s.run("MATCH (a:Accident) RETURN a.gid AS gid LIMIT 1").single()
+            param = rec["gid"] if rec else ""
+            if param:
+                print(f"（自动选用事故：{param}）")
+        rows = list(s.run(q["cypher"], limit=args.limit, param=param))
         for r in rows:
             print(dict(r))
         print(f"共 {len(rows)} 行")

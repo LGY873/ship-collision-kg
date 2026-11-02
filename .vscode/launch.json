@@ -1,4 +1,4 @@
-{
+﻿{
   "version": "0.2.0",
   "configurations": [
     {
@@ -22,7 +22,7 @@
       "env": { "PYTHONIOENCODING": "utf-8" }
     },
     {
-      "name": "抽取 runner（dev 前 5 篇）",
+      "name": "抽取 runner（dev 5 篇试跑）",
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/src/llm/runner.py",
@@ -30,7 +30,7 @@
         "--strategy", "p1",
         "--model", "qwen2.5:7b-instruct",
         "--split", "dev",
-        "--corpus", "data/corpus/corpus_fields_split.jsonl",
+        "--corpus", "data/corpus/corpus_us_seed_split.jsonl",
         "--limit", "5"
       ],
       "cwd": "${workspaceFolder}",
@@ -44,8 +44,8 @@
       "request": "launch",
       "program": "${workspaceFolder}/src/llm/postprocess.py",
       "args": [
-        "--run-id", "p1_qwen2_5_7b_instruct_dev",
-        "--corpus", "data/corpus/corpus_fields_split.jsonl"
+        "--run-id", "p1_qwen7b_dev",
+        "--corpus", "data/corpus/corpus_us_seed_split.jsonl"
       ],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
@@ -57,7 +57,7 @@
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/src/eval/evaluate.py",
-      "args": ["--run-id", "p1_qwen2_5_7b_instruct_dev", "--split", "dev"],
+      "args": ["--run-id", "p1_qwen7b_dev", "--split", "dev"],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
       "justMyCode": false,
@@ -68,7 +68,7 @@
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/src/kg/build_nodes.py",
-      "args": ["--runs", "p1_qwen2_5_7b_instruct_dev"],
+      "args": ["--runs", "p1_qwen7b_dev"],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
       "justMyCode": false,

@@ -42,12 +42,19 @@ def main():
 
     gold = {r["doc_id"]: r for r in read_jsonl(gold_path)}
     pred = {r["doc_id"]: r for r in read_jsonl(pred_path)}
-    doc_ids = [d for d in pred if d in gold]
-    if args.split != "all":
-        doc_ids = [d for d in doc_ids if gold[d].get("split") == args.split]
-    logger.info("评测文档 %d 篇（gold 共 %d，pred 共 %d）", len(doc_ids), len(gold), len(pred))
+    # 以 gold 为准枚举文档：模型没跑到的文档要计成 FN，否则跑 5 篇也能刷出高分
+    if args.split == "all":
+        doc_ids = sorted(gold)
+    else:
+        doc_ids = sorted(d for d, g in gold.items() if g.get("split") == args.split)
+    missing = [d for d in doc_ids if d not in pred]
+    logger.info("评测文档 %d 篇（gold 共 %d，pred 共 %d）；gold 有标注但未预测 %d 篇",
+                len(doc_ids), len(gold), len(pred), len(missing))
+    if missing:
+        logger.warning("未预测的文档按空结果计 FN：%s%s", ", ".join(missing[:5]),
+                       " …" if len(missing) > 5 else "")
     if not doc_ids:
-        logger.error("没有交集：检查 split 字段与 doc_id 是否一致")
+        logger.error("gold 里没有 split=%s 的文档", args.split)
         return
 
     acc = {("entity", "strict"): Accumulator(), ("entity", "loose"): Accumulator(),
@@ -55,7 +62,7 @@ def main():
 
     detail = []
     for d in doc_ids:
-        g, p = gold[d], pred[d]
+        g, p = gold[d], pred.get(d, {})
         for strict, tag in ((True, "strict"), (False, "loose")):
             gs = entity_set(g.get("entities", []), strict)
             ps = entity_set(p.get("entities", []), strict)

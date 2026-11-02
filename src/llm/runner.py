@@ -32,7 +32,7 @@ def slug(s: str) -> str:
 
 def main():
     ap = argparse.ArgumentParser(description="批量抽取")
-    ap.add_argument("--corpus", default=str(DATA / "corpus" / "corpus_fields_split.jsonl"))
+    ap.add_argument("--corpus", default=str(DATA / "corpus" / "corpus_us_seed_split.jsonl"))
     ap.add_argument("--strategy", choices=["p0", "p1", "p2"], default="p1")
     ap.add_argument("--model", default="qwen2.5:7b-instruct")
     ap.add_argument("--split", default="dev", choices=["train", "dev", "test", "all"])
@@ -40,7 +40,7 @@ def main():
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--start", type=int, default=0)
     ap.add_argument("--overwrite", action="store_true")
-    ap.add_argument("--max-tokens", type=int, default=3072)
+    ap.add_argument("--max-tokens", type=int, default=4096)
     args = ap.parse_args()
 
     run_id = args.run_id or f"{args.strategy}_{slug(args.model)}_{args.split}"
@@ -71,11 +71,20 @@ def main():
     for i, doc in enumerate(docs, 1):
         out_path = raw_dir / f"{doc['doc_id']}.json"
         if out_path.exists() and not args.overwrite:
-            skip += 1
-            continue
-        prompt = build(args.strategy, doc["text"], onto, lang=doc.get("lang", "en"))
+            # 旧的半截 JSON（无 raw 也无 error）说明上次进程被打断，重跑而不是跳过
+            try:
+                prev = json.loads(out_path.read_text(encoding="utf-8"))
+            except Exception:  # noqa: BLE001
+                prev = {}
+            if prev.get("raw") or prev.get("error"):
+                skip += 1
+                continue
+            logger.warning("%s 存在半截产物，重新抽取", doc["doc_id"])
         t0 = time.time()
+        prompt = ""
         try:
+            # build() 放进 try：单篇模板渲染失败不该中断整批
+            prompt = build(args.strategy, doc["text"], onto, lang=doc.get("lang", "en"))
             raw = client.generate(prompt)
             rec = {
                 "doc_id": doc["doc_id"],
@@ -84,6 +93,8 @@ def main():
                 "model": args.model,
                 "prompt_sha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:16],
                 "prompt_chars": len(prompt),
+                "input_chars": len(doc["text"]),
+                "input_sectioned": doc.get("sectioned"),
                 "elapsed_sec": round(time.time() - t0, 2),
                 "raw": raw,
                 "error": "",
@@ -93,10 +104,12 @@ def main():
             rec = {"doc_id": doc["doc_id"], "accident_no": doc.get("accident_no", ""),
                    "strategy": args.strategy, "model": args.model,
                    "prompt_sha256": "", "prompt_chars": len(prompt),
+                   "input_chars": len(doc["text"]), "input_sectioned": doc.get("sectioned"),
                    "elapsed_sec": round(time.time() - t0, 2), "raw": "", "error": str(e)[:300]}
             fail += 1
             logger.error("[%d/%d] %s 失败：%s", i, len(docs), doc["doc_id"], e)
-        out_path.write_text(json.dumps(rec, ensure_ascii=False, indent=2), encoding="utf-8")
+        # 原子写：崩溃不会留下半个 JSON
+        write_json(out_path, rec)
         if i % 5 == 0 or i == len(docs):
             logger.info("[%d/%d] ok=%d skip=%d fail=%d 已用时 %.1f 分钟",
                         i, len(docs), ok, skip, fail, (time.time() - t_all) / 60)

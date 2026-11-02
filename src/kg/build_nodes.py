@@ -31,18 +31,23 @@ def norm(s: str) -> str:
 
 
 def node_key(ent: dict) -> tuple[str, str]:
-    """返回 (label, gid)。gid 全局唯一，用于跨文档合并同一实体。"""
+    """返回 (label, gid)。gid 全局唯一，用于跨文档合并同一实体。
+
+    合并键必须用「能唯一标识实体」的字段：
+    - Accident：事故号在 attributes 里（schema 规定），不是顶层；
+    - Ship：优先 IMO 号，没有才用船名；
+    - Person：用姓名，不能用 role —— 否则所有 "master" 会并成同一个人。
+    """
     label = ent["type"]
     t = ent.get("text") or ""
+    attrs = ent.get("attributes") or {}
     if label == "Accident":
-        key = norm(ent.get("accident_no") or t)
+        key = norm(attrs.get("accident_no") or t)
     elif label == "Ship":
-        key = norm(t)
+        key = norm(attrs.get("imo") or t)
     elif label == "Person":
-        key = norm(ent.get("attributes", {}).get("role") or t)
-    elif label == "Environment":
-        key = norm(t)[:60]
-    elif label == "Consequence":
+        key = norm(t)
+    elif label in ("Environment", "Consequence"):
         key = norm(t)[:60]
     else:
         key = norm(t)[:80]
@@ -76,8 +81,13 @@ def main():
                 id2gid[ent["id"]] = gid
                 if gid not in nodes:
                     nodes[gid] = {"gid": gid, "label": label, "name": ent.get("text", ""),
-                                  "props": json.dumps(ent.get("attributes") or {}, ensure_ascii=False),
+                                  "props": dict(ent.get("attributes") or {}),
                                   "source_docs": set()}
+                else:
+                    # 同一实体在多篇里出现：属性取并集，不覆盖已有取值
+                    for k, v in (ent.get("attributes") or {}).items():
+                        if v and not nodes[gid]["props"].get(k):
+                            nodes[gid]["props"][k] = v
                 nodes[gid]["source_docs"].add(doc["doc_id"])
 
             for rel in doc.get("relations", []):
@@ -92,7 +102,7 @@ def main():
                     "tail": t, "tail_label": nodes[t]["label"],
                     "source_doc": doc["doc_id"], "accident_no": acc_no,
                     "model": doc.get("model", ""), "run_id": run_id,
-                    "confidence": 1.0 if rel.get("evidence_ok") else 0.5,
+                    "confidence": round(float(rel.get("evidence_ratio", 0.5) or 0.5), 3),
                     "evidence": (rel.get("evidence") or "")[:300].replace("\n", " "),
                 })
                 rel_counter[rel["relation"]] += 1
@@ -112,7 +122,8 @@ def main():
     node_rows = []
     for gid, n in nodes.items():
         node_rows.append({
-            "gid": gid, "label": n["label"], "name": n["name"], "props": n["props"],
+            "gid": gid, "label": n["label"], "name": n["name"],
+            "props": json.dumps(n["props"], ensure_ascii=False),
             "n_docs": len(n["source_docs"]),
             "source_docs": ";".join(sorted(n["source_docs"]))[:500],
         })

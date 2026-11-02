@@ -16,14 +16,18 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+# 分节标题：兼容 NTSB（"1 Factual Information"）与 MAIB（"SECTION 2 - ANALYSIS"、
+# "3.2.1 Fundamental cause"）两种排版。锚定行尾，避免误吞正文句子。
+_SEC_PREFIX = r"^\s*(?:section\s*\d+\s*[-–—:.]?\s*)?(?:\d+(?:\.\d+)*\.?\s*)?"
 SECTION_PATTERNS = [
-    ("synopsis", r"^\s*(?:synopsis|summary|executive summary)\s*$"),
-    ("factual", r"^\s*(?:\d+\.?\s*)?factual information\s*$"),
-    ("analysis", r"^\s*(?:\d+\.?\s*)?(?:analysis|analysis and discussion)\s*$"),
-    ("conclusions", r"^\s*(?:\d+\.?\s*)?conclusions?\s*$"),
-    ("cause", r"^\s*(?:\d+\.?\s*)?(?:probable cause|probable causes|cause)\s*$"),
-    ("recommendations", r"^\s*(?:\d+\.?\s*)?recommendations?\s*$"),
-    ("safety", r"^\s*(?:\d+\.?\s*)?(?:safety actions|safety recommendations)\s*$"),
+    ("synopsis", _SEC_PREFIX + r"(?:synopsis|summary|executive summary)\s*$"),
+    ("factual", _SEC_PREFIX + r"factual information\s*$"),
+    ("analysis", _SEC_PREFIX + r"(?:analysis|analysis and discussion)\s*$"),
+    ("conclusions", _SEC_PREFIX + r"conclusions?\s*$"),
+    ("cause", _SEC_PREFIX + r"(?:probable causes?|fundamental cause|underlying causes?"
+                             r"|causes?|cause)\s*$"),
+    ("recommendations", _SEC_PREFIX + r"recommendations?\s*$"),
+    ("safety", _SEC_PREFIX + r"(?:safety actions|safety recommendations)\s*$"),
 ]
 
 ABBREV = {"mr", "mrs", "ms", "dr", "capt", "cmdr", "lt", "no", "nos", "fig", "figs",
@@ -84,17 +88,90 @@ def split_sentences(text: str):
     return out
 
 
-def extract_for_extraction(sections: dict, max_chars: int = 12000) -> str:
-    """抽取输入：取 synopsis + analysis + conclusions + cause，超长截断。"""
-    order = ["synopsis", "analysis", "conclusions", "cause"]
-    parts = []
-    for k in order:
-        if k in sections:
-            parts.append(f"## {k.upper()}\n{sections[k]}")
-    if not parts:
-        parts.append(sections.get("_preamble", ""))
-    text = "\n\n".join(parts)
-    return text[:max_chars]
+# 抽取输入的分节优先级与预算比例。
+# 关键改动：cause（事故原因）排第一。旧版把 cause 放最后，正文超长时被整段切掉，
+# 模型根本看不到事故原因 —— 447 篇全文里有 55% 的文本因此丢失 "probable cause"。
+SECTION_BUDGET = [
+    ("cause", 0.40),          # 事故原因：最高优先级，论文的核心抽取字段
+    ("synopsis", 0.20),       # 摘要：含事故号、船名、时间地点
+    ("analysis", 0.30),       # 分析：风险因素与因果链
+    ("conclusions", 0.10),    # 结论
+    ("factual", 0.30),        # 事实信息：仅在还有余量时补充（船况、天气、人员）
+]
+
+
+def truncate_at_sentence(text: str, limit: int) -> str:
+    """在上限内截断，尽量落在句末，避免把句子切一半。"""
+    if len(text) <= limit:
+        return text
+    head = text[:limit]
+    last = None
+    for m in re.finditer(r"[.!?](?=\s|$)", head):
+        last = m
+    if last and last.end() >= limit * 0.5:
+        return head[: last.end()].rstrip()
+    # 没有句末标点（表格、清单、中文无标点长句）：退到最近的空白处，别把词切开
+    cut = max(head.rfind(" "), head.rfind("\n"), head.rfind("。"), head.rfind("；"))
+    if cut >= limit * 0.8:
+        return head[:cut].rstrip()
+    return head.rstrip()
+
+
+def extract_for_extraction(sections: dict, max_chars: int = 24000) -> str:
+    """抽取输入：按「事故原因优先」给各节分配预算，超预算在句末截断。
+
+    与旧版的区别：
+    1. cause 提到第一位，不再被最后切掉；
+    2. 预算按节分配（40/20/30/10），单节超长时只在句末截断；
+    3. 预算没用完就继续从各节剩余内容补（否则分节失败的文档只剩摘要，输入被压缩到 2k）；
+    4. 默认预算 24000 字符 ≈ 6k tokens，留足 qwen2.5 的 32k 上下文。
+    """
+    if not sections.get("sectioned"):
+        return truncate_at_sentence(sections.get("_preamble", ""), max_chars)
+
+    frac = dict(SECTION_BUDGET)
+    avail = [(name, (sections.get(name) or "").strip()) for name, _ in SECTION_BUDGET]
+    avail = [(n, b) for n, b in avail if b]
+    if not avail:
+        return truncate_at_sentence(sections.get("_preamble", ""), max_chars)
+
+    parts, used, consumed = [], 0, {}
+    # 分节标题（"## CAUSE\n" 与分隔空行）也占字符，先扣掉，否则总长会超出 max_chars
+    overhead = sum(len(f"## {n.upper()}\n") + 2 for n, _ in avail)
+    limit = max(1000, max_chars - overhead)
+    for name, body in avail:
+        remaining = limit - used
+        if remaining < 400:
+            break
+        budget = min(max(1200, int(limit * frac[name])), remaining)
+        piece = truncate_at_sentence(body, budget)
+        parts.append((name, piece))
+        consumed[name] = len(piece)
+        used += len(piece)
+
+    # 第二轮：把没花掉的预算按优先级继续填，避免分节少时输入过短
+    while used < limit - 1000:
+        progressed = False
+        for name, body in avail:
+            rest = body[consumed.get(name, 0):].strip()
+            if len(rest) < 400:
+                continue
+            remaining = limit - used
+            if remaining < 400:
+                break
+            piece = truncate_at_sentence(rest, remaining)
+            parts.append((name, piece))
+            consumed[name] += len(piece)
+            used += len(piece)
+            progressed = True
+            if used >= limit - 400:
+                break
+        if not progressed:
+            break
+    out = "\n\n".join(f"## {n.upper()}\n{p}" for n, p in parts)
+    if len(out) > max_chars:
+        out = truncate_at_sentence(out, max_chars)
+    return out
 
 
 def main():
