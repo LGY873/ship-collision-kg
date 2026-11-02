@@ -1,0 +1,60 @@
+{
+  // 解释器固定用项目自带的 .venv，换机器也不用重新选
+  "python.defaultInterpreterPath": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+  "python.terminal.activateEnvironment": true,
+
+  // 让 Pylance 认得出 `from src.common import ...` 这种顶层包导入
+  "python.analysis.extraPaths": ["${workspaceFolder}"],
+  "python.analysis.typeCheckingMode": "basic",
+  "python.analysis.autoImportCompletions": true,
+
+  // Windows 终端里中文不再乱码（脚本里虽然有 reconfigure，终端本身也要 UTF-8）
+  "terminal.integrated.env.windows": {
+    "PYTHONIOENCODING": "utf-8",
+    "PYTHONUTF8": "1"
+  },
+
+  "files.encoding": "utf8",
+  "files.autoGuessEncoding": false,
+  "files.eol": "\n",
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+
+  // 只藏体积大、可重新生成的目录；data/runs 留着方便直接看结果
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/*.pyc": true,
+    ".venv": true,
+    "data/raw": true,
+    "data/pdf": true,
+    "data/text": true,
+    "data/text_clean": true
+  },
+  "search.exclude": {
+    "**/.venv": true,
+    "data/raw": true,
+    "data/pdf": true,
+    "data/text": true,
+    "data/text_clean": true,
+    "data/corpus/*.jsonl": true
+  },
+
+  "[python]": {
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true,
+    "editor.formatOnSave": false
+  },
+  "[markdown]": {
+    "files.trimTrailingWhitespace": false
+  },
+  "[powershell]": {
+    "files.eol": "\r\n"
+  },
+
+  // 还没装 pytest，先关掉免得编辑器一直提示"未发现测试"
+  "python.testing.pytestEnabled": false,
+  "python.testing.unittestEnabled": false,
+
+  "git.autofetch": true,
+  "git.confirmSync": false
+}

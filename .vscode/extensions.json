@@ -1,0 +1,11 @@
+{
+  "recommendations": [
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "ms-python.debugpy",
+    "ms-vscode.powershell",
+    "eamodio.gitlens"
+  ],
+  // 可选：想开代码检查再装（Ruff 扩展自带二进制，不用 pip install）
+  "unwantedRecommendations": []
+}

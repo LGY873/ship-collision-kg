@@ -1,0 +1,42 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "环境自检",
+      "type": "shell",
+      "command": "python tools/check_env.py",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "冒烟测试（离线不调模型）",
+      "type": "shell",
+      "command": "python tools/smoke_test.py",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "group": "test"
+    },
+    {
+      "label": "离线全链路 run_offline",
+      "type": "shell",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ./run_offline.ps1",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "在线主链路（dev 前 5 篇）",
+      "type": "shell",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ./run_pipeline.ps1 -Split dev -Limit 5",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "在线主链路（dev 全量 57 篇）",
+      "type": "shell",
+      "command": "powershell -NoProfile -ExecutionPolicy Bypass -File ./run_pipeline.ps1 -Split dev",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    }
+  ]
+}

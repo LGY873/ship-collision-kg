@@ -1,0 +1,88 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "环境自检 check_env",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/tools/check_env.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "env": { "PYTHONIOENCODING": "utf-8" }
+    },
+    {
+      "name": "冒烟测试 smoke_test",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/tools/smoke_test.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "env": { "PYTHONIOENCODING": "utf-8" }
+    },
+    {
+      "name": "抽取 runner（dev 前 5 篇）",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/llm/runner.py",
+      "args": [
+        "--strategy", "p1",
+        "--model", "qwen2.5:7b-instruct",
+        "--split", "dev",
+        "--corpus", "data/corpus/corpus_fields_split.jsonl",
+        "--limit", "5"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "env": { "PYTHONIOENCODING": "utf-8" }
+    },
+    {
+      "name": "后处理 postprocess",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/llm/postprocess.py",
+      "args": [
+        "--run-id", "p1_qwen2_5_7b_instruct_dev",
+        "--corpus", "data/corpus/corpus_fields_split.jsonl"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "env": { "PYTHONIOENCODING": "utf-8" }
+    },
+    {
+      "name": "评测 evaluate",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/eval/evaluate.py",
+      "args": ["--run-id", "p1_qwen2_5_7b_instruct_dev", "--split", "dev"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "env": { "PYTHONIOENCODING": "utf-8" }
+    },
+    {
+      "name": "图谱 CSV build_nodes",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/kg/build_nodes.py",
+      "args": ["--runs", "p1_qwen2_5_7b_instruct_dev"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "env": { "PYTHONIOENCODING": "utf-8" }
+    },
+    {
+      "name": "当前文件",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${file}",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "env": { "PYTHONIOENCODING": "utf-8" }
+    }
+  ]
+}
