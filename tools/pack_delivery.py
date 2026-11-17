@@ -22,8 +22,12 @@ DOCS = ROOT / "docs"
 FILES = [
     (DOCS / "论文初稿.docx", "论文初稿.docx"),
     (DOCS / "论文初稿.md", "论文初稿.md"),
+    (DOCS / "论文初稿-模板版.docx", "论文初稿-模板版.docx"),
+    (DOCS / "论文初稿-模板版.pdf", "论文初稿-模板版.pdf"),
     (DOCS / "答辩要点.md", "答辩要点.md"),
     (DOCS / "实验结果.md", "实验结果.md"),
+    (DOCS / "微调方案.md", "微调方案.md"),
+    (DOCS / "教师PPT要点与对位.md", "教师PPT要点与对位.md"),
     (DOCS / "kg_stats.md", "图谱数据/kg_stats.md"),
     (DOCS / "kg_queries.md", "图谱数据/kg_queries.md"),
     (DATA / "kg" / "nodes.csv", "图谱数据/nodes_33篇.csv"),
